@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import DetailView, TemplateView
 
-from oscar.apps.catalogue.signals import product_viewed
+from oscar.apps.catalogue.signals import product_viewed, category_viewed
 from oscar.core.loading import get_class, get_model
 
 Product = get_model('catalogue', 'product')
@@ -154,6 +154,7 @@ class ProductCategoryView(TemplateView):
     """
     context_object_name = "products"
     template_name = 'oscar/catalogue/category.html'
+    view_signal = category_viewed
     enforce_paths = True
 
     def get(self, request, *args, **kwargs):
@@ -176,7 +177,9 @@ class ProductCategoryView(TemplateView):
             messages.error(request, _('The given page number was invalid.'))
             return redirect(self.category.get_absolute_url())
 
-        return super().get(request, *args, **kwargs)
+        response = super().get(request, *args, **kwargs)
+        self.send_signal(request, response)
+        return response
 
     def is_viewable(self, category, request):
         return category.is_public or request.user.is_staff
@@ -208,3 +211,10 @@ class ProductCategoryView(TemplateView):
             self.context_object_name)
         context.update(search_context)
         return context
+
+    def send_signal(self, request, response):
+        context = self.get_context_data()
+        self.view_signal.send(
+            sender=self, category=self.category, context=context, user=request.user,
+            request=request, response=response
+        )
